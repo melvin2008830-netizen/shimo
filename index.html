@@ -233,6 +233,17 @@
   .empty h3{font-weight:500;letter-spacing:.4em;color:var(--ink-2);font-size:1.15rem}
   .empty p{margin-top:12px;color:var(--ink-faint);letter-spacing:.12em;font-size:.92rem}
 
+  /* ---------- 來稿 ---------- */
+  .pub-badge{
+    display:inline-block;font-size:.72rem;letter-spacing:.1em;
+    color:var(--cinnabar);border:1px solid rgba(160,58,42,.5);border-radius:3px;
+    padding:1px 8px;margin-left:8px;
+  }
+  .submit-note{
+    margin-top:14px;text-align:center;color:var(--ink-faint);
+    font-size:.85rem;letter-spacing:.12em;
+  }
+
   /* ---------- 彈窗 ---------- */
   .modal{
     position:fixed;inset:0;z-index:50;
@@ -441,6 +452,24 @@
     <h3 id="emptyTitle">此處尚無文章</h3>
     <p id="emptyHint">點擊「添文」，開始搜集你的紙上風景。</p>
   </div>
+
+  <div id="pubSection">
+    <div class="sec-head">
+      <span class="seal-mini">稿</span>
+      <h2>文友來稿</h2>
+      <span class="sec-line"></span>
+      <button class="btn" id="btnSubmit"><span>投 稿</span></button>
+    </div>
+
+    <section class="grid" id="pubGrid"></section>
+
+    <div class="empty hidden" id="pubEmpty">
+      <div class="empty-glyph">稿</div>
+      <h3 id="pubEmptyTitle">尚無來稿</h3>
+      <p id="pubEmptyHint">點右上「投稿」，成為第一位文友。</p>
+      <div style="margin-top:16px"><button class="btn-mini hidden" id="btnPubRetry">再試一次</button></div>
+    </div>
+  </div>
 </main>
 
 <!-- 彈窗 -->
@@ -506,6 +535,43 @@
   </div>
 </div>
 
+<!-- 投稿彈窗 -->
+<div class="modal" id="submitModal" role="dialog" aria-modal="true">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h3>投 稿</h3>
+      <button class="sheet-close" id="btnSubmitClose" aria-label="關閉">✕</button>
+    </div>
+    <div class="sheet-body">
+      <form class="form" id="submitForm">
+        <div class="row2">
+          <div class="field">
+            <label for="p-title">標題 ＊</label>
+            <input id="p-title" required>
+          </div>
+          <div class="field">
+            <label for="p-author">筆名</label>
+            <input id="p-author" placeholder="佚名">
+          </div>
+        </div>
+        <div class="field">
+          <label for="p-tags">標籤（以逗號分隔）</label>
+          <input id="p-tags" placeholder="散文、回憶">
+        </div>
+        <div class="field">
+          <label for="p-body">正文 ＊</label>
+          <textarea id="p-body" rows="10" placeholder="把想分享的文章貼在這裡……"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn-mini" id="btnSubmitCancel">取 消</button>
+          <button type="submit" class="btn"><span>送 出</span></button>
+        </div>
+      </form>
+      <p class="submit-note">送出後需經審核，通過後才會公開於「文友來稿」。</p>
+    </div>
+  </div>
+</div>
+
 <footer>
   <span class="foot-quote">紙墨相守 · 歲月長存</span>
   <div class="foot-actions">
@@ -524,6 +590,10 @@
   'use strict';
   const STORE = 'shimo-articles-v1';   // 收藏清單
   const HIDDEN = 'shimo-hidden-v1';    // 已刪除的主檔文章（避免自動復活）
+  // Supabase 後台連線（管理端設定後填入）
+  const SUPABASE_URL = 'https://YOUR-PROJECT.supabase.co';
+  const SUPABASE_KEY = 'YOUR-ANON-KEY';
+  const SUPABASE_READY = !SUPABASE_URL.includes('YOUR-PROJECT');
   const $ = id => document.getElementById(id);
 
   let articles = [];
@@ -704,12 +774,20 @@
 
   function openView(a) {
     mode = 'view'; current = a;
-    $('modalTitle').textContent = '文 章';
+    const isPost = !!a.body;
+    $('modalTitle').textContent = isPost ? '來 稿' : '文 章';
+    $('btnViewEdit').classList.toggle('hidden', isPost);
+    $('btnViewDelete').classList.toggle('hidden', isPost);
     const tags = (a.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('');
+    const when = fmtDate(a.added || a.created_at);
+    const meta = isPost
+      ? `${esc(a.author || '佚名')} 投稿於 ${when}`
+      : `${esc(a.author || '佚名')}${a.source ? ' · ' + esc(a.source) : ''} · 藏於 ${when}`;
     let html = `
       <h2 class="view-title">${esc(a.title)}</h2>
-      <p class="view-meta">${esc(a.author || '佚名')}${a.source ? ' · ' + esc(a.source) : ''} · 藏於 ${fmtDate(a.added)}</p>
+      <p class="view-meta">${meta}</p>
       <div class="view-tags">${tags}</div>`;
+    if (a.body) html += `<div class="view-note" style="margin-top:20px"><p>${esc(a.body).replace(/\n/g, '<br>')}</p></div>`;
     if (a.quote) html += `<blockquote>${esc(a.quote)}</blockquote>`;
     if (a.note) html += `<div class="view-note"><h4>心 得</h4><p>${esc(a.note).replace(/\n/g, '<br>')}</p></div>`;
     if (a.url) html += `<div style="margin-top:22px"><a class="btn-mini" href="${esc(a.url)}" target="_blank" rel="noopener">前往出處 ↗</a></div>`;
@@ -757,6 +835,109 @@
     if (!current) return;
     removeArticle(current.id);
     closeModal(); toast('已移除');
+  }
+
+  /* ---------- 文友來稿（Supabase） ---------- */
+  let pubPosts = null;
+
+  function pubCardHTML(p) {
+    const tags = (p.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('');
+    return `
+      <article class="card">
+        <div class="card-main">
+          <h3>${esc(p.title)}</h3>
+          <p class="card-meta">${esc(p.author || '佚名')}</p>
+          <p class="card-quote">${esc(trunc(p.body || '', 64))}</p>
+          <div class="card-tags">${tags}</div>
+          <div class="card-foot">
+            <time>${fmtDate(p.created_at)}<span class="pub-badge">投稿</span></time>
+          </div>
+        </div>
+        <div class="card-side"><span>稿</span></div>
+      </article>`;
+  }
+
+  function renderPub() {
+    const grid = $('pubGrid');
+    grid.innerHTML = '';
+    const empty = $('pubEmpty');
+    $('btnPubRetry').classList.add('hidden');
+    if (pubPosts === null) {
+      empty.classList.remove('hidden');
+      $('pubEmptyTitle').textContent = '連不上後台';
+      $('pubEmptyHint').textContent = '可能是網路問題，稍後再試。';
+      $('btnPubRetry').classList.remove('hidden');
+      return;
+    }
+    if (pubPosts.length === 0) {
+      empty.classList.remove('hidden');
+      $('pubEmptyTitle').textContent = '尚無來稿';
+      $('pubEmptyHint').textContent = '點右上「投稿」，成為第一位文友。';
+      return;
+    }
+    empty.classList.add('hidden');
+    pubPosts.forEach((p, i) => {
+      const el = document.createElement('div');
+      el.innerHTML = pubCardHTML(p);
+      const card = el.firstElementChild;
+      card.style.animationDelay = (i * 55) + 'ms';
+      card.addEventListener('click', () => openView(p));
+      grid.appendChild(card);
+    });
+  }
+
+  async function fetchPub() {
+    if (!SUPABASE_READY) return;
+    pubPosts = null;
+    renderPub();
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/posts?approved=eq.true&order=created_at.desc&limit=50`, {
+        headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY }
+      });
+      if (!r.ok) throw 0;
+      pubPosts = await r.json();
+    } catch (e) { pubPosts = null; }
+    renderPub();
+  }
+
+  async function submitPost(data) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/posts`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal'
+      },
+      body: JSON.stringify(data)
+    });
+    return r.ok;
+  }
+
+  function openSubmit() { $('submitModal').classList.add('open'); setTimeout(() => $('p-title').focus(), 250); }
+  function closeSubmit() { $('submitModal').classList.remove('open'); }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const title = $('p-title').value.trim();
+    const body = $('p-body').value.trim();
+    if (!title || !body) { toast('請填標題與正文'); return; }
+    const btn = e.target.querySelector('button[type=submit]');
+    btn.disabled = true;
+    const ok = await submitPost({
+      title,
+      body,
+      author: $('p-author').value.trim() || '佚名',
+      tags: $('p-tags').value.split(/[,，、]/).map(s => s.trim()).filter(Boolean)
+    });
+    btn.disabled = false;
+    if (ok) {
+      $('submitForm').reset();
+      closeSubmit();
+      toast('已送出，審核通過後公開');
+    } else {
+      toast('送出失敗，請稍後再試');
+    }
   }
 
   /* ---------- 備份 ---------- */
@@ -817,12 +998,23 @@
     if (e.target.files[0]) importJSON(e.target.files[0]);
     e.target.value = '';
   });
+  $('btnSubmit').addEventListener('click', openSubmit);
+  $('btnSubmitClose').addEventListener('click', closeSubmit);
+  $('btnSubmitCancel').addEventListener('click', closeSubmit);
+  $('submitForm').addEventListener('submit', handleSubmit);
+  $('btnPubRetry').addEventListener('click', fetchPub);
+  $('submitModal').addEventListener('click', e => { if (e.target === $('submitModal')) closeSubmit(); });
   $('modal').addEventListener('click', e => { if (e.target === $('modal')) closeModal(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeSubmit(); } });
 
   /* ---------- 啟動 ---------- */
   articles = load();
   render();
+  if (!SUPABASE_READY) {
+    $('pubSection').classList.add('hidden');
+  } else {
+    fetchPub();
+  }
 })();
 </script>
 </body>
