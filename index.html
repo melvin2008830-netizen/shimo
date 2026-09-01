@@ -590,9 +590,9 @@
   'use strict';
   const STORE = 'shimo-articles-v1';   // 收藏清單
   const HIDDEN = 'shimo-hidden-v1';    // 已刪除的主檔文章（避免自動復活）
-  // Supabase 後台連線（管理端設定後填入）
-  const SUPABASE_URL = 'https://YOUR-PROJECT.supabase.co';
-  const SUPABASE_KEY = 'YOUR-ANON-KEY';
+  // Supabase 後台連線
+  const SUPABASE_URL = 'https://yrjudgplqgnkhinngkih.supabase.co';
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyanVkZ3BscWdua2hpbm5na2loIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNjYwNjUsImV4cCI6MjEwMzg0MjA2NX0.WRCBleU4P-nnJmH7U4Mc6vF8VOJgZMmaOty8qFye4F8';
   const SUPABASE_READY = !SUPABASE_URL.includes('YOUR-PROJECT');
   const $ = id => document.getElementById(id);
 
